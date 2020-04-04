@@ -12,18 +12,19 @@ import matplotlib.pyplot as plt
 
 emotions = ["anger", "happy"]#, "contempt", "disgust", "fear", "neutral", "sadness", "surprise"] #Emotion list
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+clf_weights_filename = 'finalized_model.sav'
 
 #Set up some required objects
 detector = dlib.get_frontal_face_detector() #Face detector
 predictor_path = 'shape_predictor_68_face_landmarks.dat'
 predictor = dlib.shape_predictor(predictor_path) #Landmark identifier. Set the filename to whatever you named the downloaded file
 
-clf = SVC(kernel='linear', probability=True, tol=1e-3)#, verbose = True) #Set the classifier as a support vector machines with polynomial kernel
+clf = SVC(kernel='linear', probability=True, tol=1e-5)#, verbose = True) #Set the classifier as a support vector machines with polynomial kernel
 
 base_dir = os.path.dirname(__file__)
 
 def get_files(emotion): #Define function to get file list, randomly shuffle it and split 80/20
-    files = glob.glob(os.path.join(base_dir,"dataset", "PrivateTest",f'{emotion}','*'))
+    files = glob.glob(os.path.join(base_dir,"dataset",f'{emotion}_set2','*'))
     random.shuffle(files)
     training = files[:int(len(files)*0.8)] #get first 80% of file list
     testing = files[-int(len(files)*0.2):] #get last 20% of file list
@@ -34,10 +35,10 @@ def get_landmarks(image):
     
     landmarks_vectorised = "error"
     lm_types = "error"
-    landmarks = "error"
+    #landmarks = "error"
     for k, d in enumerate(detections): #For each detected face
         shape = predictor(image, d) #Get coordinates
-        landmarks = np.matrix([[p.x, p.y] for p in shape.parts()])
+        #landmarks = np.matrix([[p.x, p.y] for p in shape.parts()])
     
         xlist = []
         ylist = []
@@ -72,7 +73,7 @@ def get_landmarks(image):
         'lips': (shape.parts()[48: 60], (0, 255, 0)),
         'teeth': (shape.parts()[60: 68], (0, 0, 0))
         }
-    return lm_types, landmarks_vectorised, landmarks
+    return lm_types, landmarks_vectorised
 
 def make_sets():
     training_data = []
@@ -88,11 +89,11 @@ def make_sets():
             image = cv2.imread(item) #open image
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) #convert to grayscale
             clahe_image = clahe.apply(gray)
-            lm_types, landmarks_vectorised, landmarks = get_landmarks(clahe_image)
+            lm_types, landmarks_vectorised = get_landmarks(clahe_image)
             if lm_types != "error":
                 for lm_unit in lm_types.values():
                     for lm in lm_unit[0]:
-                        cv2.circle(clahe_image, (lm.x, lm.y), 1, lm_unit[1], -1) 
+                        cv2.circle(clahe_image, (lm.x, lm.y), 2, lm_unit[1], -1) 
             plt.imshow(clahe_image)
             plt.show()
             
@@ -108,13 +109,17 @@ def make_sets():
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             clahe_image = clahe.apply(gray)
             
-            lm_types, landmarks_vectorised, landmarks = get_landmarks(clahe_image)
+            lm_types, landmarks_vectorised = get_landmarks(clahe_image)
             if lm_types != "error":
                 for lm_unit in lm_types.values():
                     for lm in lm_unit[0]:
-                        cv2.circle(clahe_image, (lm.x, lm.y), 1, lm_unit[1], -1) 
-            plt.imshow(clahe_image)
+                        cv2.circle(clahe_image, (lm.x, lm.y), 2, lm_unit[1], -1) 
+            f, (ax1, ax2) = plt.subplots(1, 2)
+            ax1.imshow(clahe_image)
+            print(landmarks_vectorised)
+            ax2.plot()
             plt.show()
+            plt.figure()
             
             if landmarks_vectorised == "error":
                 print("no face detected on this one")
@@ -123,8 +128,8 @@ def make_sets():
                 testing_labels.append(emotions.index(emotion))
     return training_data, training_labels, testing_data, testing_labels
 
-def test_clf():
-    accur_lin = []
+def train_clf():
+    #accur_lin = []
     for i in range(0,1):
         print(f"Making sets {i+1}") #Make sets by random sampling 80/20%
         training_data, training_labels, testing_data, testing_labels = make_sets()
@@ -137,8 +142,9 @@ def test_clf():
         npar_test = np.array(testing_data)
         pred_lin = clf.score(npar_test, testing_labels)
         print ("linear: ", pred_lin)
-        accur_lin.append(pred_lin) #Store accuracy in a list
-        print(f"Mean value lin svm: {np.mean(accur_lin)}") #FGet mean accuracy of the 10 runs
+        #accur_lin.append(pred_lin) #Store accuracy in a list
+        #print(f"Mean value lin svm: {np.mean(accur_lin)}") #FGet mean accuracy of the 10 runs
+    pickle.dump(clf, open(clf_weights_filename, 'wb'))
 
 def webcam_detect():
     video_capture = cv2.VideoCapture(0) #Webcam object
@@ -149,11 +155,11 @@ def webcam_detect():
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         clahe_image = clahe.apply(gray)
         #cv2.rectangle(frame, (d.left(), d.top()), (d.right(), d.bottom()), (0, 0, 255), 2)
-        lm_types = get_landmarks(clahe_image)['lm_types']
+        lm_types, landmarks_vectorised = get_landmarks(clahe_image)
         for lm_unit in lm_types.values():
             for lm in lm_unit[0]:
-                cv2.circle(frame, (lm.x, lm.y), 1, lm_unit[1], -1) 
-    
+                cv2.circle(frame, (lm.x, lm.y), 2, lm_unit[1], -1) 
+        
         cv2.imshow("image", frame) #Display the frame
     
         if cv2.waitKey(1) & 0xFF == ord('q'): #Exit program when the user presses 'q'
@@ -164,43 +170,8 @@ def webcam_detect():
     cv2.destroyAllWindows()
 
 if __name__ == '__main__':
-    #test_clf()
-    
-    clf_weights_filename = 'finalized_model.sav'
-    
-    print("Making sets") #Make sets by random sampling 80/20%
-    training_data, training_labels, testing_data, testing_labels = make_sets()
-    npar_train = np.array(training_data) #Turn the training set into a numpy array for the classifier
-    #npar_trainlabs = np.array(training_labels)
-    print("training SVM linear") #train SVM
-    print(npar_train)
-    clf.fit(npar_train, training_labels)
-    npar_test = np.array(testing_data)
-    pred_lin = clf.score(npar_test, testing_labels)
-    print ("linear: ", pred_lin)
-    
-    pickle.dump(clf, open(clf_weights_filename, 'wb'))
+    train_clf()
     
     clf = pickle.load(open(clf_weights_filename, 'rb'))
-    video_capture = cv2.VideoCapture(0) #Webcam object
-    while(video_capture.isOpened()):
-        _, frame = video_capture.read()
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        clahe_image = clahe.apply(gray)
-        lm_types, landmarks_vectorised, landmarks = get_landmarks(clahe_image)
-        if lm_types != "error":
-            for lm_unit in lm_types.values():
-                for lm in lm_unit[0]:
-                    cv2.circle(frame, (lm.x, lm.y), 1, lm_unit[1], -1) 
-        
-            pred_prob = clf.predict_proba([landmarks_vectorised])
-            print(pred_prob)
-            print(emotions[pred_prob[0].argmax()])
-        cv2.imshow("image", frame) #Display the frame
-        
-        if cv2.waitKey(1) & 0xFF == ord('q'): #Exit program when the user presses 'q'
-            print("q pressed")    
-            break
-
-    video_capture.release()
-    cv2.destroyAllWindows()
+    
+    webcam_detect()
