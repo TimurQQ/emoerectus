@@ -9,7 +9,7 @@ import math
 from sklearn.svm import SVC
 import pickle
 import matplotlib.pyplot as plt
-emotions = ["happy", "anger"]
+emotions = ["happy", "anger", "fear"]
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 clf_weights_filename = 'finalized_model.sav'
 detector = dlib.get_frontal_face_detector()
@@ -121,6 +121,9 @@ def webcam_detect():
             pred_prob = clf.predict_proba([landmarks_vectorised])
             print(pred_prob)
             print(emotions[pred_prob[0].argmax()])
+        if list(xarr) != 'error' and list(yarr) != 'error':
+            for x, y in zip(xarr, yarr):
+                cv2.circle(frame, (int(x),int(y)), 2, (0, 0, 255))
         cv2.imshow("image", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             print("q pressed")
